@@ -153,7 +153,10 @@ def load_app_model():
     # If model is missing on fresh clone, auto-build champion model from processed data
     if not os.path.exists(model_path):
         try:
-            from save_model import save_final_model
+            try:
+                from src.save_model import save_final_model
+            except ImportError:
+                from save_model import save_final_model  # type: ignore
             save_final_model()
         except Exception as err:
             return None, f"Model not found and auto-training failed: {err}"
