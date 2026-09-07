@@ -115,39 +115,43 @@ air-quality-prediction/
 
 ### Prerequisites
 - Python 3.8 to 3.12 installed on your system.
+- Git
 
-### Step 1: Install Dependencies
-Run the following command to install all necessary Python libraries:
+### 🚀 Quick Start (Run in 2 Steps)
+
 ```bash
+# 1. Clone the repository & install dependencies
+git clone https://github.com/AnshGour16/aqi-prediction-system.git
+cd aqi-prediction-system
 pip install -r requirements.txt
-```
 
-### Step 2: Download the Data
+# 2. Launch the Streamlit Web Application
+python -m streamlit run app/app.py
+```
+*(The app automatically builds and verifies the cryptographic champion model on first launch if not already present, and opens in your browser at `http://localhost:8501`)*
+
+---
+
+### 🔬 Full Pipeline Execution (Optional — Re-train from Scratch)
+
+If you wish to re-download the dataset, re-run exploratory data analysis, evaluate all 5 algorithms, and re-tune hyperparameters:
+
 ```bash
+# Step 1: Download & Preprocess Data
 python src/fetch_data.py
-```
-
-### Step 3: Run the Preprocessing Pipeline
-```bash
 python src/data_preprocessing.py
 python src/feature_engineering.py
-```
 
-### Step 4: Run Training & Serialization
-```bash
+# Step 2: Train, Tune & Evaluate All 5 Models
 python src/train_all.py
 python src/tune.py
 python src/evaluate.py
 python src/select_model.py
 python src/save_model.py
-```
 
-### Step 5: Start the Streamlit Application
-```bash
-streamlit run app/app.py
+# Step 3: Run Verification Tests
+python src/test_inference.py
 ```
-
----
 
 ## 9. Model Limitations & Future Enhancements
 - **Limitations:** Tree models cannot extrapolate outside training limits (capped at 500 AQI). Feature importance denotes mathematical association rather than physical causality.

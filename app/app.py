@@ -150,8 +150,16 @@ def load_app_model():
     project_dir = os.path.dirname(app_dir)
     model_path = os.path.join(project_dir, "artifacts", "model.joblib")
     
+    # If model is missing on fresh clone, auto-build champion model from processed data
     if not os.path.exists(model_path):
-        return None, "Model file not found."
+        try:
+            from save_model import save_final_model
+            save_final_model()
+        except Exception as err:
+            return None, f"Model not found and auto-training failed: {err}"
+            
+    if not os.path.exists(model_path):
+        return None, "Model file not found. Run 'python src/save_model.py'."
     try:
         loaded = load_secure_model(model_path, enforce_hash_check=True)
         return loaded, "Secure model loaded with verified SHA-256 signature."
