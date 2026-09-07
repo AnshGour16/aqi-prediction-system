@@ -1,0 +1,7 @@
+Model,MAE,RMSE,R2,Cat_Accuracy,Cat_Precision,Cat_Recall,Cat_F1
+Random Forest (Tuned),0.7202,8.512,0.9971,0.9888,0.9889,0.9888,0.9888
+Gradient Boosting (Tuned),2.5993,8.0106,0.9974,0.9631,0.9647,0.9631,0.9633
+Decision Tree (Tuned),0.7674,9.5833,0.9963,0.9983,0.9983,0.9983,0.9983
+K-Nearest Neighbors (Tuned),13.3141,21.0425,0.9823,0.7593,0.791,0.7593,0.7579
+Support Vector Regressor (Tuned),8.3841,15.3334,0.9906,0.8207,0.8296,0.8207,0.8205
+Ridge Regression (Tuned),18.4646,25.7412,0.9735,0.6882,0.7179,0.6882,0.681
