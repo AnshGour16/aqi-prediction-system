@@ -1,6 +1,6 @@
 import os
 import sys
-import html
+import json
 import datetime
 import streamlit as st
 import pandas as pd
@@ -14,13 +14,7 @@ SRC_DIR = os.path.join(PROJECT_DIR, "src")
 if SRC_DIR not in sys.path:
     sys.path.append(SRC_DIR)
 
-try:
-    from security_utils import load_secure_model, SecurityError
-except ImportError:
-    import joblib
-    def load_secure_model(path, enforce_hash_check=False):
-        return joblib.load(path)
-    SecurityError = Exception
+from security_utils import load_secure_model, SecurityError
 
 # Streamlit Page Configuration - Executive Dark/Light Responsive
 st.set_page_config(
@@ -317,8 +311,12 @@ header_col1, header_col2 = st.columns([3, 1])
 with header_col1:
     st.title("🌬️ Air Quality Prediction & Environmental Intelligence")
     st.markdown(
-        "Continuous **Air Quality Index (AQI)** estimation using physically coupled machine learning regressors, "
-        "atmospheric dispersion indicators, and **official CPCB India breakpoints**."
+        "Explore how pollutant and weather conditions affect air quality. Adjust the inputs or choose a scenario "
+        "to see the results update immediately."
+    )
+    st.caption(
+        "This is an interactive estimate based on your inputs, not a live sensor reading or a substitute "
+        "for official local air-quality guidance."
     )
 with header_col2:
     st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
@@ -352,6 +350,11 @@ if "scenario_applied" not in st.session_state:
     st.session_state.scenario_applied = "🏙️ Typical Urban Day"
     for k, v in SCENARIOS["🏙️ Typical Urban Day"].items():
         st.session_state[f"input_{k}"] = v
+if "input_predict_date" not in st.session_state:
+    st.session_state.input_predict_date = datetime.date.today()
+
+def mark_custom_inputs():
+    st.session_state.scenario_applied = "✏️ Custom inputs"
 
 # Navigation Tabs
 tab_predict, tab_analytics, tab_governance = st.tabs([
@@ -372,6 +375,10 @@ with tab_predict:
                     st.session_state[f"input_{k}"] = v
                 st.rerun()
 
+    st.caption(
+        f"Current preset: **{st.session_state.scenario_applied}**. "
+        "Changing any control switches to a custom scenario."
+    )
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
     
     with st.expander("🛠️ Customize Environmental & Meteorological Inputs", expanded=True):
@@ -381,51 +388,73 @@ with tab_predict:
             st.markdown("##### 🧪 Pollutant Concentrations")
             pm25 = st.slider(
                 "PM2.5 (Fine Particulates, \u03bcg/m\u00b3)", 
-                0.0, 500.0, float(st.session_state.get("input_pm25", 48.0)), 1.0,
-                help="CPCB 24-hr standard: 60 \u03bcg/m\u00b3"
+                0.0, 500.0, step=1.0,
+                help="CPCB 24-hour reference: 60 \u03bcg/m\u00b3",
+                key="input_pm25",
+                on_change=mark_custom_inputs
             )
             pm10 = st.slider(
                 "PM10 (Coarse Particulates, \u03bcg/m\u00b3)", 
-                0.0, 600.0, float(st.session_state.get("input_pm10", 88.0)), 1.0,
-                help="CPCB 24-hr standard: 100 \u03bcg/m\u00b3"
+                0.0, 600.0, step=1.0,
+                help="CPCB 24-hour reference: 100 \u03bcg/m\u00b3",
+                key="input_pm10",
+                on_change=mark_custom_inputs
             )
             no2 = st.slider(
                 "NO2 (Nitrogen Dioxide, \u03bcg/m\u00b3)", 
-                0.0, 400.0, float(st.session_state.get("input_no2", 32.0)), 1.0,
-                help="CPCB 24-hr standard: 80 \u03bcg/m\u00b3"
+                0.0, 400.0, step=1.0,
+                help="CPCB 24-hour reference: 80 \u03bcg/m\u00b3",
+                key="input_no2",
+                on_change=mark_custom_inputs
             )
             so2 = st.slider(
                 "SO2 (Sulfur Dioxide, \u03bcg/m\u00b3)", 
-                0.0, 400.0, float(st.session_state.get("input_so2", 14.0)), 1.0,
-                help="CPCB 24-hr standard: 80 \u03bcg/m\u00b3"
+                0.0, 400.0, step=1.0,
+                help="CPCB 24-hour reference: 80 \u03bcg/m\u00b3",
+                key="input_so2",
+                on_change=mark_custom_inputs
             )
             co = st.slider(
                 "CO (Carbon Monoxide, mg/m\u00b3)", 
-                0.0, 30.0, float(st.session_state.get("input_co", 1.2)), 0.1,
-                help="CPCB 8-hr standard: 2.0 mg/m\u00b3"
+                0.0, 30.0, step=0.1,
+                help="CPCB 8-hour reference: 2.0 mg/m\u00b3",
+                key="input_co",
+                on_change=mark_custom_inputs
             )
             o3 = st.slider(
                 "O3 (Ozone, \u03bcg/m\u00b3)", 
-                0.0, 300.0, float(st.session_state.get("input_o3", 38.0)), 1.0,
-                help="CPCB 8-hr standard: 100 \u03bcg/m\u00b3"
+                0.0, 300.0, step=1.0,
+                help="CPCB 8-hour reference: 100 \u03bcg/m\u00b3",
+                key="input_o3",
+                on_change=mark_custom_inputs
             )
             
         with input_c2:
             st.markdown("##### 🌤️ Meteorology & Observation Context")
             temp = st.slider(
                 "Ambient Temperature (\u00b0C)", 
-                -10.0, 50.0, float(st.session_state.get("input_temp", 27.0)), 0.5
+                -10.0, 50.0, step=0.5,
+                key="input_temp",
+                on_change=mark_custom_inputs
             )
             humidity = st.slider(
                 "Relative Humidity (%)", 
-                5.0, 100.0, float(st.session_state.get("input_humidity", 55.0)), 1.0
+                5.0, 100.0, step=1.0,
+                key="input_humidity",
+                on_change=mark_custom_inputs
             )
             wind_speed = st.slider(
                 "Wind Speed (m/s)", 
-                0.1, 25.0, float(st.session_state.get("input_wind_speed", 3.4)), 0.1,
-                help="Lower wind speed (<1.5 m/s) exacerbates air stagnation."
+                0.1, 25.0, step=0.1,
+                help="Lower wind speed (<1.5 m/s) exacerbates air stagnation.",
+                key="input_wind_speed",
+                on_change=mark_custom_inputs
             )
-            predict_date = st.date_input("Observation Date", value=datetime.date.today())
+            predict_date = st.date_input(
+                "Observation Date",
+                key="input_predict_date",
+                on_change=mark_custom_inputs
+            )
 
     # Consistency Warning
     if pm10 < pm25:
@@ -472,10 +501,12 @@ with tab_predict:
     }])
 
     # 1. Machine Learning Prediction
+    ml_pred_aqi = None
     if model is not None:
-        ml_pred_aqi = round(float(model.predict(input_df)[0]), 1)
-    else:
-        ml_pred_aqi = 100.0
+        try:
+            ml_pred_aqi = round(float(model.predict(input_df)[0]), 1)
+        except (KeyError, TypeError, ValueError) as err:
+            st.error(f"The machine-learning estimate could not be calculated: {err}")
 
     # 2. CPCB Sub-Index Calculation
     sub_indices = {
@@ -489,7 +520,21 @@ with tab_predict:
     exact_cpcb_aqi = max(sub_indices.values())
     dominant_pollutant = max(sub_indices, key=sub_indices.get)
 
-    final_aqi = round(float(np.clip(ml_pred_aqi, 0.0, 500.0)), 1)
+    aqi_values = {}
+    if ml_pred_aqi is not None:
+        aqi_values["Machine-learning estimate"] = ml_pred_aqi
+    aqi_values["CPCB calculation"] = exact_cpcb_aqi
+    result_source = st.radio(
+        "Choose the AQI shown in the main result",
+        list(aqi_values),
+        horizontal=True,
+        help=(
+            "The CPCB calculation is the highest pollutant sub-index from the entered concentrations. "
+            "The machine-learning estimate is the trained model's prediction for the same inputs."
+        )
+    )
+    final_aqi = aqi_values[result_source]
+    final_aqi = round(float(np.clip(final_aqi, 0.0, 500.0)), 1)
     category = map_aqi_to_category(final_aqi)
     meta = AQI_CATEGORIES[category]
 
@@ -497,7 +542,8 @@ with tab_predict:
     gauge_pct = min(100.0, max(0.0, (final_aqi / 500.0) * 100.0))
 
     st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
-    st.subheader("🎯 Real-Time Prediction & Health Assessment")
+    st.subheader("🎯 AQI Result & Health Assessment")
+    st.caption(f"Main result uses: **{result_source}**. Change the selection above to compare methods.")
 
     res_col1, res_col2 = st.columns([1.2, 1.8])
 
@@ -505,7 +551,7 @@ with tab_predict:
         st.markdown(f"""
         <div class="hero-card" style="background: {meta['gradient']};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="metric-pill">AI ESTIMATED AQI</span>
+                <span class="metric-pill">{result_source.upper()}</span>
                 <span style="font-size: 28px;">{meta['icon']}</span>
             </div>
             <div style="font-size: 72px; font-weight: 800; line-height: 1.1; margin: 8px 0; text-shadow: 0 2px 10px rgba(0,0,0,0.2);">
@@ -525,9 +571,15 @@ with tab_predict:
             </div>
         </div>
         """, unsafe_allow_html=True)
+        st.metric("Official CPCB calculation", f"{exact_cpcb_aqi:.1f}")
+        if ml_pred_aqi is not None:
+            st.metric("Machine-learning estimate", f"{ml_pred_aqi:.1f}")
+        else:
+            st.info("The model estimate is unavailable. The CPCB calculation remains available.")
 
     with res_col2:
         st.markdown(f"#### 🏥 Health Advisory: **{category} Air Quality**")
+        st.caption(f"Category and advisory are based on the selected {result_source.lower()}.")
         st.markdown(f"*{meta['description']}*")
         
         # Action cards
@@ -558,9 +610,37 @@ with tab_predict:
         with ind3:
             st.metric("Gaseous Burden", f"{gaseous_index:.1f}", help="Weighted aggregate of NO2, SO2, and CO")
 
+    report = {
+        "observation_date": predict_date.isoformat(),
+        "result_source": result_source,
+        "aqi": final_aqi,
+        "category": category,
+        "cpcb_calculated_aqi": round(float(exact_cpcb_aqi), 1),
+        "machine_learning_estimate": ml_pred_aqi,
+        "dominant_pollutant": dominant_pollutant,
+        "inputs": {
+            "PM2.5 (µg/m³)": pm25,
+            "PM10 (µg/m³)": pm10,
+            "NO2 (µg/m³)": no2,
+            "SO2 (µg/m³)": so2,
+            "CO (mg/m³)": co,
+            "O3 (µg/m³)": o3,
+            "temperature (°C)": temp,
+            "humidity (%)": humidity,
+            "wind_speed (m/s)": wind_speed
+        }
+    }
+    st.download_button(
+        "⬇️ Download this result as JSON",
+        data=json.dumps(report, indent=2),
+        file_name=f"aqi-result-{predict_date.isoformat()}.json",
+        mime="application/json"
+    )
+
 # ----------------- TAB 2: POLLUTANT ANALYTICS -----------------
 with tab_analytics:
-    st.subheader("📊 Pollutant Concentrations vs CPCB 24-Hour Safe Thresholds")
+    st.subheader("📊 Pollutant Concentrations vs CPCB Reference Thresholds")
+    st.caption("PM2.5, PM10, NO2, and SO2 use 24-hour references; CO and O3 use 8-hour references.")
     
     chart_data = pd.DataFrame([
         {

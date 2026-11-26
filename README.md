@@ -16,7 +16,7 @@ Air quality fluctuates dynamically based on multiple interacting environmental f
 - **AQI Model Development:** Train a regressor to predict continuous AQI from tabular daily data.
 - **Environmental Feature Analysis:** Understand correlations and feature importance of environmental factors.
 - **Comparative Evaluation:** Compare 5 classical ML regression models (Ridge, Decision Tree, Random Forest, KNN, SVR).
-- **Interactive UI Integration:** Deploy the champion model in a clean Streamlit interface with color-coded risk alerts and public advisories.
+- **Interactive UI Integration:** Explore scenario presets and live pollutant/weather inputs, compare the model estimate with the CPCB calculation, view charts and health advisories, and export a result as JSON.
 
 ---
 
@@ -130,6 +130,8 @@ python -m streamlit run app/app.py
 ```
 *(The app automatically builds and verifies the cryptographic champion model on first launch if not already present, and opens in your browser at `http://localhost:8501`)*
 
+In the app, choose a scenario or adjust the sliders to update the results. The main AQI can show either the machine-learning estimate or the CPCB calculation, and the current result can be downloaded as JSON. This is an input-driven estimate, not a live sensor dashboard or a substitute for official local air-quality guidance.
+
 ---
 
 ### 🔬 Full Pipeline Execution (Optional — Re-train from Scratch)
@@ -154,7 +156,7 @@ python src/test_inference.py
 ```
 
 ## 9. Model Limitations & Future Enhancements
-- **Limitations:** Tree models cannot extrapolate outside training limits (capped at 500 AQI). Feature importance denotes mathematical association rather than physical causality.
+- **Limitations:** Tree models cannot extrapolate outside training limits (capped at 500 AQI). Feature importance denotes mathematical association rather than physical causality. The interactive app estimates conditions from user-entered values; it does not display live sensor readings.
 - **Future Scope:** Integrating real-time IoT air pollution sensor networks, and leveraging LSTM/RNN models for sequential forecasting.
 
 ---
