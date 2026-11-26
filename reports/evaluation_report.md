@@ -1,6 +1,6 @@
 # Detailed Model Evaluation Report
 
-This report evaluates the tuned models on both continuous regression metrics and derived CPCB AQI classification bands on the balanced dataset.
+> **Legacy random-split results:** This report evaluates tuned models on a random row-wise 80/20 split. Records from the same date may occur in both partitions. Treat these scores as exploratory, not as an out-of-time evaluation or future-forecast evidence. The target is same-day AQI derived from pollutant sub-indices, and the current processed dataset is synthetic. For a date-grouped holdout, see `reports/temporal_evaluation_report.md`.
 
 ## Overall Summary Table
 

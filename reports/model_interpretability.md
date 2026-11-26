@@ -1,11 +1,14 @@
 # Model Interpretability & Selection Report
 
 ## Selected Champion Model
-- **Algorithm:** Tuned Random Forest Regressor (`n_estimators=150`, `min_samples_split=2`)
+- **Algorithm:** Random Forest Regressor (`n_estimators=150`, `min_samples_split=2`, `min_samples_leaf=1`)
 - **Cryptographic Security:** Signed with SHA-256 integrity manifest (`model.joblib.sha256`).
-- **Rationale:** Achieved near-perfect regression fidelity ($R^2 > 98\%$) and high categorical precision across all 6 CPCB air quality categories.
+- **Training data:** The committed model uses the generated synthetic dataset, not observed sensor readings.
+- **Interpretation:** The target is same-day AQI derived from pollutant sub-indices. Random row-split scores do not establish future-date forecasting performance; see `reports/temporal_evaluation_report.md` for a date-grouped holdout.
 
 ## Feature Importances Ranking
+These are global Random Forest importances across training examples. They summarize feature use; they are not causal explanations or per-scenario contributions.
+
 |    | Feature                |   Importance |
 |---:|:-----------------------|-------------:|
 |  1 | pm10_median            |  0.469492    |
@@ -33,7 +36,5 @@
 | 23 | Season_Winter          |  2.34612e-06 |
 | 21 | Season_Spring          |  1.5977e-07  |
 
-## Domain & Physical Analysis
-1. **Particulate & Gaseous Drivers:** `pm25_median`, `pm10_median`, and combustion gases (`no2_median`, `co_median`) exhibit the highest predictive contribution, aligning directly with CPCB sub-index breakpoints.
-2. **Engineered Physical Indices:** `Stagnation_Index` ($PM_{2.5}/(Wind+0.1)$) and `Gaseous_Index` capture complex multi-pollutant accumulation during atmospheric inversions.
-3. **Meteorological Interactions:** Wind speed, temperature, and humidity interact to modulate dispersion and photochemical ozone reaction rates.
+## Interpreting the Importances
+The synthetic target is calculated from pollutant sub-indices, so pollutant concentrations dominate the learned AQI estimate. These importances do not show that the model discovered causal relationships, nor do they identify the contribution of a feature for an individual scenario.

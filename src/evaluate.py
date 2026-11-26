@@ -71,7 +71,12 @@ def run_detailed_evaluation():
     
     report_lines = []
     report_lines.append("# Detailed Model Evaluation Report\n")
-    report_lines.append("This report evaluates the tuned models on both continuous regression metrics and derived CPCB AQI classification bands on the balanced dataset.\n")
+    report_lines.append(
+        "This legacy report uses a random row-wise 80/20 split. Rows from the same date can appear "
+        "in both partitions, so these metrics are exploratory and are not an out-of-time evaluation "
+        "or evidence of future forecasting performance. Use `python src/evaluate_temporal.py` for "
+        "date-grouped holdout metrics.\n"
+    )
     
     for model_name, filename in models.items():
         model_path = os.path.join(artifacts_dir, filename)

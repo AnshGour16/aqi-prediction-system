@@ -35,18 +35,26 @@ def get_preprocessing_pipeline(numeric_features, categorical_features):
         ])
     return preprocessor
 
-def save_final_model():
-    df = load_data()
-    
+def get_model_features(df):
     numeric_features = [
         'pm25_median', 'pm10_median', 'no2_median', 'so2_median', 'co_median', 'o3_median',
-        'temperature_median', 'humidity_median', 'wind-speed_median', 
-        'PM25_PM10_ratio', 'PM25_Wind_Ratio', 'Stagnation_Index', 
+        'temperature_median', 'humidity_median', 'wind-speed_median',
+        'PM25_PM10_ratio', 'PM25_Wind_Ratio', 'Stagnation_Index',
         'Gaseous_Index', 'Thermal_Humidity_Index',
         'Month', 'DayOfWeek', 'Month_Sin', 'Month_Cos', 'DayOfWeek_Sin', 'DayOfWeek_Cos'
     ]
-    numeric_features = [f for f in numeric_features if f in df.columns]
     categorical_features = ['Season']
+    missing_features = [
+        feature for feature in numeric_features + categorical_features
+        if feature not in df.columns
+    ]
+    if missing_features:
+        raise ValueError(f"Dataset is missing model features: {', '.join(missing_features)}")
+    return numeric_features, categorical_features
+
+def save_final_model():
+    df = load_data()
+    numeric_features, categorical_features = get_model_features(df)
     
     X = df[numeric_features + categorical_features]
     y = df['AQI']

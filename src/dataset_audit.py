@@ -21,6 +21,11 @@ def audit_dataset():
     report = []
     report.append("# Comprehensive Dataset Audit Report\n")
     report.append(f"- **Dataset Source:** `{os.path.basename(data_path)}`")
+    if os.path.basename(data_path) == "synthetic_air_quality_data.csv":
+        report.append("- **Dataset Type:** Locally generated synthetic examples; not measured sensor observations.")
+        report.append("- **AQI Target:** Derived from CPCB pollutant sub-indices by `src/generate_dataset.py`.")
+    else:
+        report.append("- **Dataset Type:** Public DEAP-derived raw data; validate pollutant units before training.")
     report.append(f"- **Total Rows:** {total_rows}")
     report.append(f"- **Total Columns:** {total_cols}")
     report.append(f"- **Duplicate Rows:** {duplicates}")

@@ -1,6 +1,8 @@
 # Comprehensive Dataset Audit Report
 
 - **Dataset Source:** `synthetic_air_quality_data.csv`
+- **Dataset Type:** Locally generated synthetic examples; not measured sensor observations.
+- **AQI Target:** Derived from CPCB pollutant sub-indices by `src/generate_dataset.py`.
 - **Total Rows:** 51000
 - **Total Columns:** 12
 - **Duplicate Rows:** 0

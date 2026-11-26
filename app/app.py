@@ -279,8 +279,37 @@ def load_app_model():
     except Exception as e:
         return None, f"Model Loading Error: {e}"
 
+def get_global_feature_importances(loaded_model):
+    if loaded_model is None:
+        return None
+
+    model_steps = getattr(loaded_model, "named_steps", {})
+    preprocessor = model_steps.get("preprocessor")
+    regressor = model_steps.get("regressor")
+    if (
+        preprocessor is None
+        or regressor is None
+        or not hasattr(regressor, "feature_importances_")
+    ):
+        return None
+
+    feature_names = preprocessor.get_feature_names_out()
+    importances = regressor.feature_importances_
+    if len(feature_names) != len(importances):
+        raise ValueError("Model feature names do not match its feature importances.")
+
+    importance_df = pd.DataFrame({
+        "Feature": [
+            name.split("__", 1)[-1].replace("_median", "").replace("_", " ")
+            for name in feature_names
+        ],
+        "Importance": importances
+    })
+    return importance_df.nlargest(8, "Importance").sort_values("Importance")
+
 # Load model instantly from cache
 model, load_status = load_app_model()
+global_feature_importances = get_global_feature_importances(model)
 
 # Sidebar: CPCB AQI Scale Guide (Theme adaptive)
 with st.sidebar:
@@ -304,7 +333,7 @@ with st.sidebar:
     st.markdown("#### 🛡️ System Integrity")
     st.caption(f"Status: `{load_status}`")
     st.caption("Architecture: `Tuned Random Forest Regressor`")
-    st.caption("Validation R²: `99.71%` | MAE: `0.72`")
+    st.caption("Training data: generated synthetic examples, not live sensor measurements.")
 
 # Header Section
 header_col1, header_col2 = st.columns([3, 1])
@@ -316,7 +345,7 @@ with header_col1:
     )
     st.caption(
         "This is an interactive estimate based on your inputs, not a live sensor reading or a substitute "
-        "for official local air-quality guidance."
+        "for official local air-quality guidance. It estimates same-day AQI; it does not forecast future conditions."
     )
 with header_col2:
     st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
@@ -581,6 +610,11 @@ with tab_predict:
         st.markdown(f"#### 🏥 Health Advisory: **{category} Air Quality**")
         st.caption(f"Category and advisory are based on the selected {result_source.lower()}.")
         st.markdown(f"*{meta['description']}*")
+        st.caption(
+            f"The highest CPCB sub-index for these inputs is {dominant_pollutant} "
+            f"({sub_indices[dominant_pollutant]:.1f}). This identifies the CPCB calculation driver, "
+            "not a causal explanation of the model prediction."
+        )
         
         # Action cards
         act1, act2 = st.columns(2)
@@ -609,6 +643,14 @@ with tab_predict:
             st.metric("Stagnation Index", f"{stagnation_index:.1f}", help="Higher values indicate low ventilation and entrapment")
         with ind3:
             st.metric("Gaseous Burden", f"{gaseous_index:.1f}", help="Weighted aggregate of NO2, SO2, and CO")
+
+    with st.expander("How to interpret this result"):
+        st.markdown(
+            "- **Machine-learning estimate:** the trained model estimates same-day AQI from the entered readings.\n"
+            "- **CPCB calculation:** the highest calculated pollutant sub-index for the entered concentrations.\n"
+            "- **Dominant pollutant:** the pollutant with that highest CPCB sub-index; it is not a causal model explanation.\n"
+            "- **Data limitation:** the current model uses generated synthetic examples, not live sensor observations."
+        )
 
     report = {
         "observation_date": predict_date.isoformat(),
@@ -693,32 +735,61 @@ with tab_governance:
     with gov_col1:
         st.markdown("##### 🏆 Champion Model Architecture")
         st.markdown("""
-        * **Algorithm:** `Random Forest Regressor (Hyperparameter Tuned)`
-        * **Ensemble Size:** `200 Estimators with Min-Samples-Leaf Regularization`
-        * **Input Dimensions:** `22 Engineered Atmospheric Features`
+        * **Algorithm:** `Random Forest Regressor`
+        * **Ensemble Size:** `150 trees`
+        * **Input Fields:** `21 same-day pollutant, weather, and calendar values`
         * **Verification Hash:** `SHA-256 Cryptographic Checksum Active`
-        * **Training Set:** Full CPCB Multimodal Sensor Dataset
+        * **Training Data:** Generated synthetic examples; no live sensor feed
         """)
         
     with gov_col2:
-        st.markdown("##### 📈 Validated Evaluation Metrics")
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            st.metric("Test R² Score", "0.9971", "High Precision")
-        with m2:
-            st.metric("MAE", "0.7202", "Low Deviation")
-        with m3:
-            st.metric("Category Acc.", "98.88%", "Top Tier")
+        st.markdown("##### 📈 Chronological Holdout Metrics")
+        temporal_results_path = os.path.join(
+            PROJECT_DIR, "reports", "temporal_evaluation.csv"
+        )
+        if os.path.exists(temporal_results_path):
+            temporal_results = pd.read_csv(temporal_results_path)
+            champion_result = temporal_results[
+                temporal_results["Model"] == "Random Forest (chronological holdout)"
+            ]
+            if not champion_result.empty:
+                metrics = champion_result.iloc[0]
+                metric_cols = st.columns(3)
+                metric_cols[0].metric("Test MAE", f"{metrics['MAE']:.2f} AQI")
+                metric_cols[1].metric("Test R²", f"{metrics['R2']:.4f}")
+                metric_cols[2].metric(
+                    "Category accuracy", f"{metrics['Category Accuracy'] * 100:.2f}%"
+                )
+                st.caption(
+                    f"Trained through {metrics['Training Through']}; tested from "
+                    f"{metrics['Test From']} on later dates."
+                )
+                st.caption(
+                    "These metrics are from a separate model fit on the training-date partition; "
+                    "the interactive app's model is fitted on all available training rows."
+                )
+            temporal_results_display = temporal_results.copy()
+            temporal_results_display["Category Accuracy"] = (
+                temporal_results_display["Category Accuracy"].map("{:.2%}".format)
+            )
+            st.dataframe(temporal_results_display, use_container_width=True, hide_index=True)
+        else:
+            st.info(
+                "Run `python src/evaluate_temporal.py` to generate date-based holdout metrics."
+            )
 
     st.markdown("---")
-    st.markdown("##### 🔬 Benchmark Comparison Against Standard Baselines")
-    
-    comparison_data = pd.DataFrame([
-        {"Model": "Random Forest (Champion)", "MAE": 0.7202, "RMSE": 8.5120, "R² Score": 0.9971, "Category Accuracy": "98.88%"},
-        {"Model": "Gradient Boosting", "MAE": 2.5993, "RMSE": 8.0106, "R² Score": 0.9974, "Category Accuracy": "96.31%"},
-        {"Model": "Decision Tree", "MAE": 0.7674, "RMSE": 9.5833, "R² Score": 0.9963, "Category Accuracy": "99.83%"},
-        {"Model": "Support Vector Regressor", "MAE": 8.3841, "RMSE": 15.3334, "R² Score": 0.9906, "Category Accuracy": "82.07%"},
-        {"Model": "K-Nearest Neighbors", "MAE": 13.3141, "RMSE": 21.0425, "R² Score": 0.9823, "Category Accuracy": "75.93%"},
-        {"Model": "Ridge Regression (Baseline)", "MAE": 18.4646, "RMSE": 25.7412, "R² Score": 0.9735, "Category Accuracy": "68.82%"}
-    ])
-    st.dataframe(comparison_data, use_container_width=True, hide_index=True)
+    st.markdown("##### 🔎 Global Model Feature Importance")
+    if global_feature_importances is not None:
+        importance_chart = alt.Chart(global_feature_importances).mark_bar().encode(
+            x=alt.X("Importance:Q", title="Relative feature importance"),
+            y=alt.Y("Feature:N", sort=None, title=None),
+            tooltip=["Feature", alt.Tooltip("Importance:Q", format=".4f")]
+        ).properties(height=260)
+        st.altair_chart(importance_chart, use_container_width=True)
+        st.caption(
+            "These Random Forest importances summarize feature use across training data; "
+            "they are not causal explanations or per-scenario contributions."
+        )
+    else:
+        st.info("Global feature importance is not available for the loaded model.")
