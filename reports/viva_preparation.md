@@ -44,7 +44,7 @@ This guide contains 25+ likely viva/presentation questions with concise, technic
 **Answer:** A Decision Tree splits data recursively into subsets based on feature thresholds, which can easily overfit the training set. A Random Forest is an *ensemble* method that trains multiple independent decision trees on bootstrapped data samples and averages their predictions, which significantly reduces variance and prevents overfitting.
 
 #### Q12: Why did Random Forest perform the best in your experiments?
-**Answer:** The Random Forest approximates the CPCB-derived same-day target from pollutant and engineered inputs. On the chronological holdout it achieved MAE 0.6093, RMSE 5.9093, and $R^2$ 0.9986 on synthetic data. This result measures agreement with the generated rule-based target and does not establish real-world performance.
+**Answer:** The Random Forest approximates the CPCB-derived same-day target from pollutant and engineered inputs. On the chronological holdout it achieved MAE 0.9376, RMSE 3.2872, $R^2$ 0.9995, and 99.22% CPCB category accuracy on synthetic data. This result measures agreement with the generated rule-based target and does not establish real-world performance.
 
 #### Q13: Why did Support Vector Regressor (SVR) perform poorly on this task?
 **Answer:** SVR is one of the exploratory comparison models. Its reported score comes from the older random-row evaluation, so compare it only within that setup; the chronological evaluation currently compares the deployed Random Forest with a mean baseline.
@@ -61,9 +61,9 @@ This guide contains 25+ likely viva/presentation questions with concise, technic
 
 #### Q16: What do MAE, RMSE, and R² score measure?
 **Answer:** 
-- **MAE (Mean Absolute Error):** Average absolute error; the temporal holdout MAE is 0.6093 AQI points.
-- **RMSE (Root Mean Squared Error):** Penalizes larger errors more heavily; the temporal holdout RMSE is 5.9093.
-- **$R^2$ (R-squared/Coefficient of Determination):** Measures explained target variance; the temporal holdout $R^2$ is 0.9986. These are results on generated synthetic data.
+- **MAE (Mean Absolute Error):** Average absolute error; the temporal holdout MAE is 0.9376 AQI points.
+- **RMSE (Root Mean Squared Error):** Penalizes larger errors more heavily; the temporal holdout RMSE is 3.2872.
+- **$R^2$ (R-squared/Coefficient of Determination):** Measures explained target variance; the temporal holdout $R^2$ is 0.9995. These are results on generated synthetic data.
 
 #### Q17: How did you compute classification metrics (like Accuracy and F1-score) for a regression model?
 **Answer:** We did not train a classifier. Instead, we predicted continuous AQI values on the test set, mapped both true and predicted values to CPCB risk categories, and calculated standard classification metrics (accuracy, precision, recall) on the mapped categories.
@@ -79,7 +79,7 @@ This guide contains 25+ likely viva/presentation questions with concise, technic
 **Answer:** It measures how frequently a feature is selected for splits and how much it reduces impurity (variance) across all trees. It indicates *predictive association*, not a physical causal relationship.
 
 #### Q20: Which features were most important, and does this align with environmental science?
-**Answer:** The committed Random Forest's global importances are led by PM10 (about 46.9%), PM2.5 (15.5%), NO2 (13.5%), and `Gaseous_Index` (12.8%). Since the synthetic target is calculated from pollutant sub-indices, this ranking mainly reflects that target construction; it is not causal evidence or a per-input explanation.
+**Answer:** The committed Random Forest's global importances are led by `Gaseous_Index` (about 79.7%), PM2.5 (13.2%), PM10 (2.8%), and O3 (2.5%). Because the synthetic target is the maximum CPCB sub-index, `Gaseous_Index` acts as a compact proxy for the NO2/SO2/CO group; this ranking mainly reflects the generated target construction, not causal evidence or a per-input explanation.
 
 #### Q21: What engineered features did you create and how did they perform?
 **Answer:** We created:

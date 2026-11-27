@@ -8,8 +8,10 @@ from sklearn.metrics import accuracy_score, mean_absolute_error, mean_squared_er
 from sklearn.pipeline import Pipeline
 
 if __package__:
+    from .aqi_utils import map_aqi_to_category
     from .save_model import get_model_features, get_preprocessing_pipeline
 else:
+    from aqi_utils import map_aqi_to_category
     from save_model import get_model_features, get_preprocessing_pipeline
 
 
@@ -37,20 +39,6 @@ def split_by_date(df, test_fraction=0.2):
     if train_df.empty or test_df.empty:
         raise ValueError("Chronological split produced an empty training or test set.")
     return train_df, test_df, cutoff
-
-
-def map_aqi_to_category(value):
-    if value <= 50:
-        return "Good"
-    if value <= 100:
-        return "Satisfactory"
-    if value <= 200:
-        return "Moderate"
-    if value <= 300:
-        return "Poor"
-    if value <= 400:
-        return "Very Poor"
-    return "Severe"
 
 
 def evaluate_predictions(model_name, y_true, y_pred):

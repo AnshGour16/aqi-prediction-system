@@ -8,9 +8,10 @@ from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 )
 
-# Import secure loader
+# Import secure loader and the shared CPCB category mapping
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from security_utils import load_secure_model
+from aqi_utils import map_aqi_to_category as _map_aqi_to_category
 
 def load_data():
     project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,20 +21,9 @@ def load_data():
     return pd.read_csv(data_path)
 
 def map_aqi_to_category(val):
-    if pd.isna(val):
-        return 'Missing'
-    if 0 <= val <= 50:
-        return 'Good'
-    elif 51 <= val <= 100:
-        return 'Satisfactory'
-    elif 101 <= val <= 200:
-        return 'Moderate'
-    elif 201 <= val <= 300:
-        return 'Poor'
-    elif 301 <= val <= 400:
-        return 'Very Poor'
-    else:
-        return 'Severe'
+    """CPCB category, keeping the legacy ``Missing`` label for null targets."""
+    category = _map_aqi_to_category(val)
+    return "Missing" if category == "Unknown" else category
 
 def run_detailed_evaluation():
     df = load_data()

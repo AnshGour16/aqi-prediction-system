@@ -12,7 +12,7 @@
 ## Results
 | Model                                 |   Training Rows |   Test Rows | Training Through   | Test From   |      MAE |     RMSE |      R2 |   Category Accuracy |
 |:--------------------------------------|----------------:|------------:|:-------------------|:------------|---------:|---------:|--------:|--------------------:|
-| Mean baseline                         |           40676 |       10324 | 2024-03-13         | 2024-03-14  | 139.8314 | 157.6600 | -0.0000 |              0.1424 |
-| Random Forest (chronological holdout) |           40676 |       10324 | 2024-03-13         | 2024-03-14  |   0.6093 |   5.9093 |  0.9986 |              0.9900 |
+| Mean baseline                         |           40676 |       10324 | 2024-03-13         | 2024-03-14  | 134.9799 | 151.6378 | -0.0000 |              0.1628 |
+| Random Forest (chronological holdout) |           40676 |       10324 | 2024-03-13         | 2024-03-14  |   0.9376 |   3.2872 |  0.9995 |              0.9922 |
 
 MAE and RMSE are measured in AQI points. Category accuracy compares the derived CPCB bands after clipping estimates to the 0–500 range.

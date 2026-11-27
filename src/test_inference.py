@@ -1,119 +1,111 @@
+"""End-to-end inference checks for the signed champion model.
+
+Unlike the previous version, this script asserts real expectations: the CPCB
+category derived from the inputs, the model's predicted category, and the
+agreement between the two. It exits non-zero on failure so CI can use it.
+"""
+
 import os
 import sys
-import pandas as pd
+import datetime
+
 import numpy as np
 
-# Import secure loader
+# Import secure loader and shared helpers
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from aqi_utils import compute_aqi_from_concentrations, map_aqi_to_category
+from feature_builder import build_feature_frame
 from security_utils import load_secure_model
 
-def map_aqi_to_category(val):
-    if val <= 50: return 'Good'
-    elif val <= 100: return 'Satisfactory'
-    elif val <= 200: return 'Moderate'
-    elif val <= 300: return 'Poor'
-    elif val <= 400: return 'Very Poor'
-    else: return 'Severe'
+#: Maximum tolerated gap, in AQI points, between the model and CPCB maths.
+MODEL_TOLERANCE = 20.0
+
 
 def run_tests():
     project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     model_path = os.path.join(project_dir, "artifacts", "model.joblib")
-    
+
     print(f"[TEST INFERENCE] Loading signed champion model: {model_path}")
     model = load_secure_model(model_path, enforce_hash_check=True)
-    
+
     test_cases = [
         {
-            "name": "Case 1: Pristine Spring Air (Good)",
-            "data": {
-                'pm25_median': 15.0,
-                'pm10_median': 28.0,
-                'no2_median': 12.0,
-                'so2_median': 8.0,
-                'co_median': 0.5,
-                'o3_median': 22.0,
-                'temperature_median': 22.0,
-                'humidity_median': 45.0,
-                'wind-speed_median': 5.5,
-                'PM25_PM10_ratio': 15.0 / 28.0,
-                'PM25_Wind_Ratio': 15.0 / 5.5,
-                'Stagnation_Index': 15.0 / (5.5 + 0.1),
-                'Gaseous_Index': 12.0 + 8.0 + 5.0,
-                'Thermal_Humidity_Index': 22.0 * 0.45,
-                'Month': 4,
-                'DayOfWeek': 2,
-                'Month_Sin': np.sin(2 * np.pi * 4 / 12.0),
-                'Month_Cos': np.cos(2 * np.pi * 4 / 12.0),
-                'DayOfWeek_Sin': np.sin(2 * np.pi * 2 / 7.0),
-                'DayOfWeek_Cos': np.cos(2 * np.pi * 2 / 7.0),
-                'Season': 'Spring'
-            }
+            "name": "Case 1: Pristine Spring Air",
+            "values": {
+                "pm25": 15.0, "pm10": 28.0, "no2": 12.0, "so2": 8.0,
+                "co": 0.5, "o3": 22.0, "temp": 22.0, "humidity": 45.0,
+                "wind_speed": 5.5,
+            },
+            "date": datetime.date(2024, 4, 10),
+            "expected_category": "Good",
         },
         {
-            "name": "Case 2: Heavy Winter Smog (Severe)",
-            "data": {
-                'pm25_median': 320.0,
-                'pm10_median': 480.0,
-                'no2_median': 120.0,
-                'so2_median': 45.0,
-                'co_median': 15.0,
-                'o3_median': 35.0,
-                'temperature_median': 5.0,
-                'humidity_median': 88.0,
-                'wind-speed_median': 0.8,
-                'PM25_PM10_ratio': 320.0 / 480.0,
-                'PM25_Wind_Ratio': 320.0 / 0.8,
-                'Stagnation_Index': 320.0 / (0.8 + 0.1),
-                'Gaseous_Index': 120.0 + 45.0 + 150.0,
-                'Thermal_Humidity_Index': 5.0 * 0.88,
-                'Month': 12,
-                'DayOfWeek': 3,
-                'Month_Sin': np.sin(2 * np.pi * 12 / 12.0),
-                'Month_Cos': np.cos(2 * np.pi * 12 / 12.0),
-                'DayOfWeek_Sin': np.sin(2 * np.pi * 3 / 7.0),
-                'DayOfWeek_Cos': np.cos(2 * np.pi * 3 / 7.0),
-                'Season': 'Winter'
-            }
+            "name": "Case 2: Heavy Winter Smog",
+            "values": {
+                "pm25": 320.0, "pm10": 480.0, "no2": 120.0, "so2": 45.0,
+                "co": 15.0, "o3": 35.0, "temp": 5.0, "humidity": 88.0,
+                "wind_speed": 0.8,
+            },
+            "date": datetime.date(2024, 12, 18),
+            "expected_category": "Severe",
         },
         {
-            "name": "Case 3: Summer Dust Storm (Moderate/Poor)",
-            "data": {
-                'pm25_median': 75.0,
-                'pm10_median': 180.0,
-                'no2_median': 45.0,
-                'so2_median': 22.0,
-                'co_median': 2.5,
-                'o3_median': 85.0,
-                'temperature_median': 38.0,
-                'humidity_median': 35.0,
-                'wind-speed_median': 4.2,
-                'PM25_PM10_ratio': 75.0 / 180.0,
-                'PM25_Wind_Ratio': 75.0 / 4.2,
-                'Stagnation_Index': 75.0 / (4.2 + 0.1),
-                'Gaseous_Index': 45.0 + 22.0 + 25.0,
-                'Thermal_Humidity_Index': 38.0 * 0.35,
-                'Month': 6,
-                'DayOfWeek': 5,
-                'Month_Sin': np.sin(2 * np.pi * 6 / 12.0),
-                'Month_Cos': np.cos(2 * np.pi * 6 / 12.0),
-                'DayOfWeek_Sin': np.sin(2 * np.pi * 5 / 7.0),
-                'DayOfWeek_Cos': np.cos(2 * np.pi * 5 / 7.0),
-                'Season': 'Summer'
-            }
-        }
+            "name": "Case 3: Summer Dust Storm",
+            "values": {
+                "pm25": 75.0, "pm10": 180.0, "no2": 45.0, "so2": 22.0,
+                "co": 2.5, "o3": 85.0, "temp": 38.0, "humidity": 35.0,
+                "wind_speed": 4.2,
+            },
+            "date": datetime.date(2024, 6, 14),
+            "expected_category": "Moderate",
+        },
     ]
-    
+
+    failures = []
     print("\n--- Running End-to-End Inference Verification ---")
     for case in test_cases:
+        values = case["values"]
+        input_df = build_feature_frame(values, observation_date=case["date"])
+
+        cpcb_aqi = compute_aqi_from_concentrations(values)
+        cpcb_category = map_aqi_to_category(cpcb_aqi)
+
+        raw_prediction = float(model.predict(input_df)[0])
+        predicted_aqi = round(float(np.clip(raw_prediction, 0.0, 500.0)), 1)
+        predicted_category = map_aqi_to_category(predicted_aqi)
+
         print(f"\nScenario: {case['name']}")
-        input_df = pd.DataFrame([case['data']])
-        pred = model.predict(input_df)[0]
-        pred_aqi = round(np.clip(pred, 0.0, 500.0), 1)
-        cat = map_aqi_to_category(pred_aqi)
-        print(f"-> Predicted AQI: {pred_aqi}")
-        print(f"-> Derived Category: {cat}")
-        
-    print("\n[PASSED] All inference tests and cryptographic checks passed successfully!")
+        print(f"  CPCB AQI      : {cpcb_aqi:.1f} ({cpcb_category})")
+        print(f"  Model estimate: {predicted_aqi:.1f} ({predicted_category})")
+        print(f"  Difference    : {abs(predicted_aqi - cpcb_aqi):.1f} AQI points")
+
+        if cpcb_category != case["expected_category"]:
+            failures.append(
+                f"{case['name']}: CPCB category {cpcb_category!r} != "
+                f"expected {case['expected_category']!r}"
+            )
+        if predicted_category != case["expected_category"]:
+            failures.append(
+                f"{case['name']}: model category {predicted_category!r} != "
+                f"expected {case['expected_category']!r}"
+            )
+        if abs(predicted_aqi - cpcb_aqi) > MODEL_TOLERANCE:
+            failures.append(
+                f"{case['name']}: model differs from CPCB by "
+                f"{abs(predicted_aqi - cpcb_aqi):.1f} points "
+                f"(tolerance {MODEL_TOLERANCE})"
+            )
+        if not 0.0 <= predicted_aqi <= 500.0:
+            failures.append(f"{case['name']}: prediction {predicted_aqi} outside 0-500")
+
+    if failures:
+        print("\n[FAILED] Inference checks failed:")
+        for failure in failures:
+            print(f"  - {failure}")
+        raise SystemExit(1)
+
+    print("\n[PASSED] All inference, category and cryptographic checks passed.")
+
 
 if __name__ == "__main__":
     run_tests()

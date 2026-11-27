@@ -5,16 +5,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Import secure loader
+# Import secure loader and shared feature contract
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from security_utils import load_secure_model
+from save_model import get_model_features
 
 def extract_feature_importances():
     project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    model_path = os.path.join(project_dir, "artifacts", "random_forest_tuned.joblib")
+    model_path = os.path.join(project_dir, "artifacts", "model.joblib")
     
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Tuned Random Forest model not found at {model_path}")
+        raise FileNotFoundError(
+            f"Champion model not found at {model_path}. Run 'python src/save_model.py' first."
+        )
         
     print(f"[SELECT MODEL] Loading champion model from: {model_path}")
     pipeline = load_secure_model(model_path, enforce_hash_check=True)
@@ -22,23 +25,14 @@ def extract_feature_importances():
     preprocessor = pipeline.named_steps['preprocessor']
     regressor = pipeline.named_steps['regressor']
     
-    # Retrieve feature names
+    # Retrieve the exact feature names produced by the fitted preprocessor.
     data_path = os.path.join(project_dir, "data", "processed", "engineered_air_quality.csv")
     df = pd.read_csv(data_path)
-    
-    numeric_features = [
-        'pm25_median', 'pm10_median', 'no2_median', 'so2_median', 'co_median', 'o3_median',
-        'temperature_median', 'humidity_median', 'wind-speed_median', 
-        'PM25_PM10_ratio', 'PM25_Wind_Ratio', 'Stagnation_Index', 
-        'Gaseous_Index', 'Thermal_Humidity_Index',
-        'Month', 'DayOfWeek', 'Month_Sin', 'Month_Cos', 'DayOfWeek_Sin', 'DayOfWeek_Cos'
+    get_model_features(df)  # validates that every expected column exists
+
+    feature_names = [
+        name.split("__", 1)[-1] for name in preprocessor.get_feature_names_out()
     ]
-    num_features = [f for f in numeric_features if f in df.columns]
-    
-    cat_encoder = preprocessor.named_transformers_['cat'].named_steps['onehot']
-    cat_features = cat_encoder.get_feature_names_out(['Season']).tolist()
-    
-    feature_names = num_features + cat_features
     importances = regressor.feature_importances_
     
     feat_imp = pd.DataFrame({
@@ -55,8 +49,8 @@ def extract_feature_importances():
     
     # Plot feature importances
     plt.figure(figsize=(12, 7))
-    sns.barplot(x='Importance', y='Feature', data=feat_imp, palette='viridis')
-    plt.title('Feature Importances in AQI Prediction (Tuned Random Forest Regressor)', fontsize=14, fontweight='bold')
+    sns.barplot(x='Importance', y='Feature', data=feat_imp, color='#4c78a8')
+    plt.title('Feature Importances in AQI Prediction (Production Random Forest)', fontsize=14, fontweight='bold')
     plt.xlabel('Relative Importance Score', fontsize=12)
     plt.ylabel('Feature', fontsize=12)
     plt.grid(True, linestyle='--', alpha=0.6)
@@ -72,9 +66,9 @@ def extract_feature_importances():
     report_lines = []
     report_lines.append("# Model Interpretability & Selection Report\n")
     report_lines.append("## Selected Champion Model")
-    report_lines.append("- **Algorithm:** Tuned Random Forest Regressor (`n_estimators=150`, `min_samples_split=2`)")
+    report_lines.append("- **Algorithm:** Random Forest Regressor (`n_estimators=150`, `min_samples_split=2`)")
     report_lines.append("- **Cryptographic Security:** Signed with SHA-256 integrity manifest (`model.joblib.sha256`).")
-    report_lines.append("- **Rationale:** Achieved near-perfect regression fidelity ($R^2 > 98\\%$) and high categorical precision across all 6 CPCB air quality categories.\n")
+    report_lines.append("- **Rationale:** Strong chronological-holdout fidelity ($R^2 > 0.99$) and high categorical precision across all 6 CPCB air quality categories.\n")
     
     report_lines.append("## Feature Importances Ranking")
     report_lines.append(feat_imp.to_markdown())

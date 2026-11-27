@@ -1,6 +1,10 @@
 import os
+import sys
+
 import pandas as pd
-import numpy as np
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from aqi_utils import BREAKPOINTS, calculate_sub_index, map_aqi_to_category
 
 def audit_dataset():
     project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -30,6 +34,34 @@ def audit_dataset():
     report.append(f"- **Total Columns:** {total_cols}")
     report.append(f"- **Duplicate Rows:** {duplicates}")
     report.append(f"- **Missing AQI Rows:** {df['AQI'].isna().sum() if 'AQI' in df.columns else 'N/A'}\n")
+
+    if 'AQI' in df.columns:
+        report.append("## Target Integrity Checks\n")
+        if 'Category' in df.columns:
+            derived = df['AQI'].apply(map_aqi_to_category)
+            mismatches = int((derived != df['Category']).sum())
+            report.append(f"- **Category/AQI mismatches:** {mismatches}")
+        report.append(f"- **Rows at the 500 AQI cap:** {int((df['AQI'] >= 499.95).sum())}")
+        if {'pm25_median', 'pm10_median'}.issubset(df.columns):
+            inverted = int((df['pm10_median'] < df['pm25_median']).sum())
+            report.append(f"- **Rows with PM10 < PM2.5:** {inverted}")
+
+        # A concentration below a pollutant's top breakpoint must never score
+        # the 500 cap. This is the regression check for the old 0.1-wide gaps.
+        gap_caps = 0
+        for pollutant, column in (
+            ('PM2.5', 'pm25_median'), ('PM10', 'pm10_median'), ('NO2', 'no2_median'),
+            ('SO2', 'so2_median'), ('CO', 'co_median'), ('O3', 'o3_median'),
+        ):
+            if column not in df.columns:
+                continue
+            top = BREAKPOINTS[pollutant][-1][1]
+            below_top = df[column] < top
+            capped = df.loc[below_top, column].apply(
+                lambda value, p=pollutant: calculate_sub_index(value, p) == 500.0
+            )
+            gap_caps += int(capped.sum())
+        report.append(f"- **Sub-index 500 values below a top breakpoint (gap bug):** {gap_caps}\n")
     
     report.append("## Feature Nullability & Data Types\n")
     null_info = []
@@ -50,15 +82,7 @@ def audit_dataset():
     report.append(df.describe().to_markdown() + "\n")
     
     if 'AQI' in df.columns:
-        def map_cat(val):
-            if val <= 50: return 'Good (0-50)'
-            elif val <= 100: return 'Satisfactory (51-100)'
-            elif val <= 200: return 'Moderate (101-200)'
-            elif val <= 300: return 'Poor (201-300)'
-            elif val <= 400: return 'Very Poor (301-400)'
-            else: return 'Severe (>400)'
-            
-        cats = df['AQI'].apply(map_cat).value_counts()
+        cats = df['AQI'].apply(map_aqi_to_category).value_counts()
         cat_df = pd.DataFrame({
             "Category": cats.index,
             "Count": cats.values,

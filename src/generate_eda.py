@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -55,15 +54,16 @@ def generate_plots():
     plt.savefig(os.path.join(fig_dir, 'pollutant_distributions.png'), dpi=300, bbox_inches='tight')
     plt.close()
     
-    # 3. Boxplots for Outliers
+    # 3. Boxplots for Outliers (one panel per pollutant so units are not mixed)
     print("Generating boxplots for pollutants...")
-    plt.figure(figsize=(12, 6))
-    df_melted = df[list(key_pollutants.keys())].rename(columns=key_pollutants).melt()
-    sns.boxplot(x='variable', y='value', data=df_melted, palette='Set2')
-    plt.title('Outliers in Pollutant Concentrations')
-    plt.xlabel('Pollutant')
-    plt.ylabel('Concentration')
-    plt.grid(True, linestyle='--', alpha=0.5)
+    fig, axes = plt.subplots(3, 2, figsize=(14, 15))
+    axes = axes.flatten()
+    for i, (col, name) in enumerate(key_pollutants.items()):
+        sns.boxplot(y=df[col].dropna(), ax=axes[i], color='#55a868', width=0.35)
+        axes[i].set_title(f'Outlier Profile: {name}')
+        axes[i].set_ylabel('Concentration')
+        axes[i].grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
     plt.savefig(os.path.join(fig_dir, 'pollutant_boxplots.png'), dpi=300, bbox_inches='tight')
     plt.close()
     

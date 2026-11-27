@@ -2,15 +2,10 @@ import os
 import pandas as pd
 import numpy as np
 
-def get_season(month):
-    if month in [12, 1, 2]:
-        return "Winter"
-    elif month in [3, 4, 5]:
-        return "Spring"
-    elif month in [6, 7, 8]:
-        return "Summer"
-    else:
-        return "Autumn"
+try:
+    from .aqi_utils import get_season
+except ImportError:  # Running as a script: `python src/feature_engineering.py`
+    from aqi_utils import get_season
 
 def engineer_features():
     project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

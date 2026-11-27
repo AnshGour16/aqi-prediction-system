@@ -21,7 +21,7 @@ Air quality fluctuates dynamically based on multiple interacting environmental f
 ---
 
 ## 3. Dataset & Feature Mappings
-The current processed dataset and committed model use `data/raw/synthetic_air_quality_data.csv`, a locally generated dataset of 51,000 simulated records. `src/data_preprocessing.py` prioritizes this file whenever it exists. `src/generate_dataset.py` creates the pollutant and weather values and derives each AQI target from CPCB pollutant sub-indices. These are **not observed sensor readings**, and they do not represent actual cities.
+The current processed dataset and committed model use `data/raw/synthetic_air_quality_data.csv`, a locally generated dataset of 51,000 simulated records. `src/data_preprocessing.py` prioritizes this file whenever it exists. `src/generate_dataset.py` creates the pollutant and weather values and derives each AQI target from CPCB pollutant sub-indices. Each row is anchored by one pollutant sampled inside the target category, while the remaining pollutants vary from their Good-range minimum up to the same category ceiling; this produces realistic mixed-pollutant rows instead of moving every pollutant up and down together. These are **not observed sensor readings**, and they do not represent actual cities.
 
 The repository also contains `data/raw/city_pollution_data.csv`, a public DEAP-derived dataset downloaded by `src/fetch_data.py`. It is only selected by preprocessing when the synthetic file is absent. The fallback path has not been used for the committed processed data, and its source-specific pollutant unit conversions should be validated before using it for training.
 
@@ -42,8 +42,10 @@ Dataset Selection -> Data Collection -> Preprocessing & Cleaning -> Feature Engi
 
 1. **Data Preprocessing:** Handled missing values (imputed using median values in pipeline), duplicates (removed), invalid values (negative values replaced with NaN), and verified target calculations.
 2. **AQI Calculation standard:** Mapped target values using official **Indian CPCB standards** based on sub-index breakpoints:
-   - Good (0–50) | Satisfactory (51–100) | Moderate (101–200) | Poor (201–300) | Very Poor (301–400) | Severe (>400)
-3. **Feature Engineering:** Calendar profiles (`Month`, `DayOfWeek`, `Season`) and physical interactions (`PM25_PM10_ratio`, `PM25_Wind_Ratio`) were engineered.
+   - Good (0–50) | Satisfactory (51–100) | Moderate (101–200) | Poor (201–300) | Very Poor (301–400) | Severe (401–500)
+   - The breakpoint tables are **contiguous** (no 0.1-wide holes between bands), so a concentration cannot fall through to the 500 cap and be mis-scored. The same `src/aqi_utils.py` module is used by the pipeline and the Streamlit app.
+   - Every `Category` label is derived from its numeric `AQI` value, so the two can never disagree.
+3. **Feature Engineering:** Calendar profiles (`Month`, `DayOfWeek`, `Season`) and physical interactions (`PM25_PM10_ratio`, `PM25_Wind_Ratio`, `Stagnation_Index`, `Gaseous_Index`, `Thermal_Humidity_Index`) were engineered. `src/feature_builder.py` constructs the same 21-feature row for app inference and tests.
 4. **Evaluation:** The original model comparison scripts use random row splits and are exploratory. `python src/evaluate_temporal.py` instead holds out complete dates: it trains on records through 2024-03-13 and evaluates records from 2024-03-14 onward for the current generated dataset.
 
 ---
@@ -53,15 +55,15 @@ A matching Random Forest pipeline was fitted on the earlier dates and evaluated 
 
 | Model | MAE (AQI points) | RMSE | $R^2$ | CPCB category accuracy |
 | :--- | ---: | ---: | ---: | ---: |
-| **Random Forest (chronological holdout)** | **0.6093** | **5.9093** | **0.9986** | **99.00%** |
-| Mean baseline | 139.8314 | 157.6600 | approximately 0.0000 | 14.24% |
+| **Random Forest (chronological holdout)** | **0.9376** | **3.2872** | **0.9995** | **99.22%** |
+| Mean baseline | 134.9799 | 151.6378 | approximately 0.0000 | 16.28% |
 
-These metrics are measured on the generated synthetic dataset and do not establish real-world performance. Earlier multi-model scores in `reports/raw_model_comparison.csv`, `reports/model_comparison.csv`, and `reports/tuned_model_comparison.csv` come from random row splits; treat them as exploratory, not as evidence of generalization to future dates or cities.
+These metrics are measured on the generated synthetic dataset and do not establish real-world performance. Earlier multi-model scores in `reports/raw_model_comparison.csv`, `reports/model_comparison.csv`, and `reports/tuned_model_comparison.csv` come from random row splits; treat them as exploratory, not as evidence of generalization to future dates or cities. The standalone `Air_Quality_Prediction_Presentation_Guide.pdf` predates the latest dataset regeneration, so its metric figures are superseded by the table above and `reports/temporal_evaluation.csv`.
 
 ---
 
 ## 6. Champion Model & Serialization
-The deployed **Random Forest Regressor** (`n_estimators=150`, `min_samples_split=2`, `min_samples_leaf=1`) is serialized with its preprocessing pipeline in `artifacts/model.joblib`. The committed artifact is trained on the generated synthetic dataset. The chronological evaluation fits a separate copy using only its training-date partition; it does not evaluate the all-data production artifact.
+The deployed **Random Forest Regressor** (`n_estimators=150`, `min_samples_split=2`, `min_samples_leaf=1`) is serialized with its preprocessing pipeline in `artifacts/model.joblib`. The committed artifact is trained on the generated synthetic dataset. The chronological evaluation fits a separate copy using only its training-date partition; it does not evaluate the all-data production artifact. The app builds its 21-feature inference row with `src/feature_builder.py`, the same contract used by the pipeline and tests.
 
 ---
 
@@ -78,7 +80,9 @@ air-quality-prediction/
 │
 ├── src/
 │   ├── fetch_data.py        # Dataset downloader
-│   ├── dataset_audit.py     # Initial profile & correlation checks
+│   ├── dataset_audit.py     # Dataset profile & integrity checks
+│   ├── aqi_utils.py         # Shared CPCB breakpoints, sub-indices & categories
+│   ├── feature_builder.py   # Shared 21-feature inference row builder
 │   ├── data_preprocessing.py # CPCB calculations & data cleaning
 │   ├── feature_engineering.py# calendar & ratio transformations
 │   ├── train.py             # Baseline model training
@@ -87,6 +91,7 @@ air-quality-prediction/
 │   ├── evaluate.py          # Continuous & category-level verification
 │   ├── evaluate_temporal.py # Date-grouped holdout evaluation
 │   ├── test_temporal_evaluation.py # Date split regression tests
+│   ├── test_aqi_utils.py    # CPCB maths regression tests
 │   ├── select_model.py      # Feature importance rankings
 │   ├── save_model.py        # Final retrain and serialization script
 │   └── test_inference.py    # Edge-cases test scenarios
@@ -115,7 +120,7 @@ air-quality-prediction/
 ## 8. Installation & Execution
 
 ### Prerequisites
-- Python 3.8 to 3.12 installed on your system.
+- Python 3.10 to 3.12 installed on your system.
 - Git
 
 ### 🚀 Quick Start (Run in 2 Steps)
@@ -155,7 +160,7 @@ python src/evaluate_temporal.py
 
 # Step 3: Run Verification Tests
 python src/test_inference.py
-python -m unittest src.test_temporal_evaluation
+python -m unittest src.test_temporal_evaluation src.test_aqi_utils
 ```
 
 ## 9. Model Limitations & Future Enhancements

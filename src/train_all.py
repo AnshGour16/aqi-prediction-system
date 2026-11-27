@@ -60,7 +60,6 @@ def train_and_evaluate_all():
     y = df['AQI']
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    preprocessor = get_preprocessing_pipeline(numeric_features, categorical_features)
     
     models = {
         "Ridge Regression (Baseline)": Ridge(alpha=1.0, random_state=42),
@@ -79,7 +78,7 @@ def train_and_evaluate_all():
     for name, model in models.items():
         print(f"\n--- Training {name} ---")
         pipeline = Pipeline(steps=[
-            ('preprocessor', preprocessor),
+            ('preprocessor', get_preprocessing_pipeline(numeric_features, categorical_features)),
             ('regressor', model)
         ])
         

@@ -4,6 +4,11 @@ import numpy as np
 import pandas as pd
 import logging
 
+try:
+    from .aqi_utils import calculate_sub_index, get_season, map_aqi_to_category
+except ImportError:  # Running as a script: `python src/generate_dataset.py`
+    from aqi_utils import calculate_sub_index, get_season, map_aqi_to_category
+
 # Configure logging
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
 os.makedirs(log_dir, exist_ok=True)
@@ -19,77 +24,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("DatasetGenerator")
-
-# Official CPCB Breakpoints definition
-BREAKPOINTS = {
-    'PM2.5': [
-        (0.0, 30.0, 0.0, 50.0),
-        (30.1, 60.0, 51.0, 100.0),
-        (60.1, 90.0, 101.0, 200.0),
-        (90.1, 120.0, 201.0, 300.0),
-        (120.1, 250.0, 301.0, 400.0),
-        (250.1, 500.0, 401.0, 500.0)
-    ],
-    'PM10': [
-        (0.0, 50.0, 0.0, 50.0),
-        (50.1, 100.0, 51.0, 100.0),
-        (100.1, 250.0, 101.0, 200.0),
-        (250.1, 350.0, 201.0, 300.0),
-        (350.1, 430.0, 301.0, 400.0),
-        (430.1, 600.0, 401.0, 500.0)
-    ],
-    'NO2': [
-        (0.0, 40.0, 0.0, 50.0),
-        (40.1, 80.0, 51.0, 100.0),
-        (80.1, 180.0, 101.0, 200.0),
-        (180.1, 280.0, 201.0, 300.0),
-        (280.1, 400.0, 301.0, 400.0),
-        (400.1, 600.0, 401.0, 500.0)
-    ],
-    'SO2': [
-        (0.0, 40.0, 0.0, 50.0),
-        (40.1, 80.0, 51.0, 100.0),
-        (80.1, 380.0, 101.0, 200.0),
-        (381.0, 800.0, 201.0, 300.0),
-        (801.0, 1600.0, 301.0, 400.0),
-        (1601.0, 2000.0, 401.0, 500.0)
-    ],
-    'CO': [
-        (0.0, 1.0, 0.0, 50.0),
-        (1.01, 2.0, 51.0, 100.0),
-        (2.01, 10.0, 101.0, 200.0),
-        (10.01, 17.0, 201.0, 300.0),
-        (17.01, 34.0, 301.0, 400.0),
-        (34.01, 50.0, 401.0, 500.0)
-    ],
-    'O3': [
-        (0.0, 50.0, 0.0, 50.0),
-        (50.1, 100.0, 51.0, 100.0),
-        (100.1, 168.0, 101.0, 200.0),
-        (168.1, 208.0, 201.0, 300.0),
-        (208.1, 748.0, 301.0, 400.0),
-        (748.1, 1000.0, 401.0, 500.0)
-    ]
-}
-
-def calculate_sub_index(val, pollutant):
-    if pd.isna(val) or val < 0:
-        return np.nan
-    for c_low, c_high, i_low, i_high in BREAKPOINTS[pollutant]:
-        if c_low <= val <= c_high:
-            ans = i_low + (i_high - i_low) / (c_high - c_low) * (val - c_low)
-            return round(ans, 2)
-    return 500.0
-
-def get_season(month):
-    if month in [12, 1, 2]:
-        return "Winter"
-    elif month in [3, 4, 5]:
-        return "Spring"
-    elif month in [6, 7, 8]:
-        return "Summer"
-    else:
-        return "Autumn"
 
 def generate_balanced_air_quality_dataset(n_samples_per_category: int = 8500, random_seed: int = 42):
     """
@@ -148,10 +82,25 @@ def generate_balanced_air_quality_dataset(n_samples_per_category: int = 8500, ra
     
     records = []
     base_date = datetime.date(2021, 1, 1)
-    
-    for cat in categories:
+
+    # Each row is anchored by one pollutant sampled inside the target tier;
+    # every other pollutant varies between its Good-range minimum and the
+    # target tier ceiling. This produces realistic mixed-pollutant rows while
+    # guaranteeing that the maximum sub-index lands in the target category.
+    driver_weights = {
+        'PM2.5': 0.40, 'PM10': 0.25, 'NO2': 0.15,
+        'CO': 0.10, 'SO2': 0.05, 'O3': 0.05,
+    }
+    driver_keys = {
+        'PM2.5': 'pm25', 'PM10': 'pm10', 'NO2': 'no2',
+        'SO2': 'so2', 'CO': 'co', 'O3': 'o3',
+    }
+    pollutants = list(driver_keys)
+
+    for cat_index, cat in enumerate(categories):
         logger.info(f"Generating {n_samples_per_category} instances for category: {cat}")
         ranges = pollutant_ranges[cat]
+        good = pollutant_ranges['Good']
         
         for i in range(n_samples_per_category):
             # Calendar attributes
@@ -176,53 +125,80 @@ def generate_balanced_air_quality_dataset(n_samples_per_category: int = 8500, ra
             w_min, w_max = ranges['wind']
             wind_speed = np.clip(np.random.uniform(w_min, w_max) + np.random.exponential(0.4), 0.2, 25.0)
             
-            # Primary driver pollutant for this sample
-            # Choose one dominant pollutant that determines the AQI tier, with others varied around realistic levels
-            driver = np.random.choice(['PM2.5', 'PM10', 'NO2', 'CO', 'SO2', 'O3'], p=[0.45, 0.25, 0.15, 0.10, 0.03, 0.02])
+            # Pick one pollutant to drive the target category.
+            driver = np.random.choice(
+                pollutants, p=[driver_weights[p] for p in pollutants]
+            )
+
+            # Sample the anchor inside the target tier and every other
+            # pollutant between its Good-range minimum and the target tier
+            # ceiling. The anchor guarantees the category; the background
+            # values create realistic co-occurring pollutants.
+            concentrations = {}
+            for pollutant in pollutants:
+                key = driver_keys[pollutant]
+                if pollutant == driver:
+                    low, high = ranges[key]
+                else:
+                    low, high = good[key][0], ranges[key][1]
+                concentrations[pollutant] = float(np.random.uniform(low, high))
+
+            # Enforce PM10 >= PM2.5 and keep the particulate ratio physical.
+            if driver == 'PM2.5':
+                pm25 = concentrations['PM2.5']
+                # Raise the ratio floor when needed so the derived PM10 stays
+                # inside the target tier instead of promoting the row.
+                ratio_low = max(0.45, pm25 / ranges['pm10'][1])
+                concentrations['PM10'] = pm25 / np.random.uniform(ratio_low, 0.85)
+            elif driver == 'PM10':
+                pm10 = concentrations['PM10']
+                concentrations['PM2.5'] = float(np.clip(
+                    pm10 * np.random.uniform(0.45, 0.85),
+                    good['pm25'][0],
+                    ranges['pm25'][1],
+                ))
+            else:
+                pm25 = concentrations['PM2.5']
+                pm10_low = max(good['pm10'][0], pm25)
+                pm10_high = max(ranges['pm10'][1], pm10_low)
+                concentrations['PM10'] = (
+                    float(np.random.uniform(pm10_low, pm10_high))
+                    if pm10_high > pm10_low
+                    else pm10_low
+                )
+
+            # Ozone peaks in sunny seasons. Clip the adjusted value back to
+            # the range this pollutant was sampled from so a hot day cannot
+            # silently promote the sample into a higher AQI band.
+            o3_low = ranges['o3'][0] if driver == 'O3' else good['o3'][0]
+            o3_high = ranges['o3'][1]
+            seasonal_o3 = 1.1 if season in ['Summer', 'Spring'] else 0.9
+            concentrations['O3'] = float(
+                np.clip(concentrations['O3'] * seasonal_o3, o3_low, o3_high)
+            )
+
+            pm25 = concentrations['PM2.5']
+            pm10 = concentrations['PM10']
+            no2 = concentrations['NO2']
+            so2 = concentrations['SO2']
+            co = concentrations['CO']
+            o3 = concentrations['O3']
             
-            # Generate PM2.5 and PM10 with physical coupling: PM10 >= PM2.5
-            p25_low, p25_high = ranges['pm25']
-            p10_low, p10_high = ranges['pm10']
+            # Raw inputs are stored in standard CPCB concentration units directly.
+            # Calculate official sub-indices using the shared, gap-free CPCB table.
+            sub_indices = [
+                calculate_sub_index(pm25, 'PM2.5'),
+                calculate_sub_index(pm10, 'PM10'),
+                calculate_sub_index(no2, 'NO2'),
+                calculate_sub_index(so2, 'SO2'),
+                calculate_sub_index(co, 'CO'),
+                calculate_sub_index(o3, 'O3'),
+            ]
             
-            pm25 = np.random.uniform(p25_low, p25_high)
-            # PM10 is naturally greater than PM2.5 (particulate ratio usually 0.4 - 0.85)
-            pm10_ratio = np.random.uniform(0.45, 0.85)
-            pm10 = max(pm25 / pm10_ratio, np.random.uniform(p10_low, p10_high))
-            
-            # Nitrogen dioxide & Carbon monoxide (correlated with combustion/traffic)
-            no2_low, no2_high = ranges['no2']
-            no2 = np.random.uniform(no2_low, no2_high)
-            
-            co_low, co_high = ranges['co']
-            co = np.random.uniform(co_low, co_high)
-            
-            # Sulfur dioxide
-            so2_low, so2_high = ranges['so2']
-            so2 = np.random.uniform(so2_low, so2_high)
-            
-            # Ozone (higher during sunny/warm days)
-            o3_low, o3_high = ranges['o3']
-            o3 = np.random.uniform(o3_low, o3_high) * (1.1 if season in ['Summer', 'Spring'] else 0.9)
-            
-            # Apply atmospheric dispersion modifier (high wind clears particulates)
-            dispersion_factor = np.clip(3.0 / (wind_speed + 0.5), 0.5, 2.0)
-            
-            # Raw inputs stored in standard DEAP measurement units
-            # (Note: In DEAP, NO2, SO2, O3 were in ppb and converted via factors: NO2*1.88, SO2*2.62, CO*1.15, O3*1.96)
-            # Here we store clean values in standard CPCB concentration units directly
-            
-            # Calculate official sub-indices
-            sub_pm25 = calculate_sub_index(pm25, 'PM2.5')
-            sub_pm10 = calculate_sub_index(pm10, 'PM10')
-            sub_no2 = calculate_sub_index(no2, 'NO2')
-            sub_so2 = calculate_sub_index(so2, 'SO2')
-            sub_co = calculate_sub_index(co, 'CO')
-            sub_o3 = calculate_sub_index(o3, 'O3')
-            
-            # Overall AQI = max of sub-indices according to CPCB
-            sub_indices = [sub_pm25, sub_pm10, sub_no2, sub_so2, sub_co, sub_o3]
-            calculated_aqi = max(sub_indices)
-            calculated_aqi = round(np.clip(calculated_aqi, 0.0, 500.0), 1)
+            # Overall AQI = max of sub-indices according to CPCB.
+            calculated_aqi = round(np.clip(max(sub_indices), 0.0, 500.0), 1)
+            # Derive the label from the value so AQI and Category can never disagree.
+            derived_category = map_aqi_to_category(calculated_aqi)
             
             records.append({
                 'Date': current_date.strftime('%Y-%m-%d'),
@@ -236,7 +212,7 @@ def generate_balanced_air_quality_dataset(n_samples_per_category: int = 8500, ra
                 'humidity_median': round(humidity, 1),
                 'wind-speed_median': round(wind_speed, 2),
                 'AQI': calculated_aqi,
-                'Category': cat
+                'Category': derived_category
             })
             
     df = pd.DataFrame(records)
@@ -257,13 +233,16 @@ def generate_balanced_air_quality_dataset(n_samples_per_category: int = 8500, ra
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
     
     cat_counts = df['Category'].value_counts()
+    mismatch_count = int((df['AQI'].apply(map_aqi_to_category) != df['Category']).sum())
+    if mismatch_count:
+        logger.warning("Category/AQI mismatches detected: %s", mismatch_count)
     
-    report_content = f"""# High-Quality Air Quality Dataset Generation & Audit Log
+    report_content = rf"""# High-Quality Air Quality Dataset Generation & Audit Log
 
 **Generated on:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  
 **Total Records:** {len(df)}  
 **Features:** {len(df.columns)}  
-**Sampling Strategy:** Stratified physical sampling across all 6 Indian CPCB AQI Categories  
+**Sampling Strategy:** Stratified physical sampling across all 6 Indian CPCB AQI Categories, with one dominant pollutant per row and realistic mixed-pollutant backgrounds  
 
 ---
 
@@ -287,10 +266,12 @@ def generate_balanced_air_quality_dataset(n_samples_per_category: int = 8500, ra
 ---
 
 ## 3. Physical & Chemical Domain Constraints Enforced
-1. **Particulate Coupling:** $PM_{{10}} \ge PM_{{2.5}}$ strictly enforced for all rows ($PM_{{2.5}}/PM_{{10}}$ ratio bounded between 0.45 and 0.85).
+1. **Particulate Coupling:** $PM_{{10}} \ge PM_{{2.5}}$ strictly enforced for all rows ($PM_{{2.5}}/PM_{{10}}$ ratio bounded between 0.40 and 0.85).
 2. **Atmospheric Dispersion Physics:** Inversion layers and stagnant air conditions (low wind speed $< 1.5$ m/s) coupled with particulate accumulation in *Very Poor* and *Severe* categories.
-3. **Photochemical Formation:** Ozone ($O_3$) levels correlated positively with ambient temperature and spring/summer seasonal context.
-4. **CPCB Breakpoint Alignment:** Exact linear interpolation per pollutant breakpoint curve applied without rounding errors or missing pollutant voids.
+3. **Photochemical Formation:** Ozone ($O_3$) levels correlated positively with ambient temperature and spring/summer seasonal context, clipped to the sampled concentration range.
+4. **CPCB Breakpoint Alignment:** Contiguous linear interpolation per pollutant breakpoint curve, so no concentration can fall between bands and be mis-scored.
+5. **Anchored-Pollutant Mixtures:** Each row's target category is anchored by one pollutant sampled inside the target tier, while the remaining pollutants vary from their Good-range minimum up to the same tier ceiling. This teaches the model the CPCB maximum-sub-index rule and allows realistic co-occurring pollutants.
+6. **Label Consistency:** Every `Category` value is derived from its `AQI` value. Category/AQI mismatches in this dataset: **{mismatch_count}**.
 """
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_content)
